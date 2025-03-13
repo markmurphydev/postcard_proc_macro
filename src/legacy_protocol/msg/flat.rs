@@ -454,12 +454,12 @@ impl<'a, S: std::fmt::Debug + InternableSpan> Writer<'a, '_, S> {
 
     // DONE
     fn subtree(&mut self, idx: usize, subtree: tt::iter::TtIter<'a, S>) {
-        eprintln!("~~subtree~~");
-        eprintln!("idx={idx}");
+        // eprintln!("~~subtree~~");
+        // eprintln!("idx={idx}");
         let mut first_tt = self.token_tree.len();
-        eprintln!("first_tt={first_tt}");
+        // eprintln!("first_tt={first_tt}");
         let n_tt = subtree.clone().count(); // FIXME: `count()` walks over the entire iterator.
-        eprintln!("n_tt={n_tt}");
+        // eprintln!("n_tt={n_tt}");
 
         self.token_tree.resize(first_tt + n_tt, !0);
 
@@ -543,7 +543,7 @@ impl<'a, S: std::fmt::Debug + InternableSpan> Writer<'a, '_, S> {
             self.token_tree[first_tt] = idx_tag;
             first_tt += 1;
         }
-        eprintln!("{self:#?}");
+        // eprintln!("{self:#?}");
     }
 
     /// DONE

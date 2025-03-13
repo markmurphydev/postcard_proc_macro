@@ -13,12 +13,13 @@ simple-define-macro = { path = "./simple-define-macro" }
 [dependencies]
 anyhow = "1.0"
 indexmap = "2.8"
-intern = { path = "../ra/rust_analyzer/crates/intern/" }
-paths = { path = "../ra/rust_analyzer/crates/paths/", features = ["serde1"] }
+intern = { path = "../link_ra/crates/intern/" }
+paths = { path = "../link_ra/crates/paths/", features = ["serde1"] }
 rustc-hash = "2.1"
 simple-define-macro.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["unbounded_depth"] }
-span = { path = "../ra/rust_analyzer/crates/span/" }
-stdx = { path = "../ra/rust_analyzer/crates/stdx/" }
-tt = { path = "../ra/rust_analyzer/crates/tt/" }
+salsa = "0.19"
+span = { path = "../link_ra/crates/span/" }
+stdx = { path = "../link_ra/crates/stdx/" }
+tt = { path = "../link_ra/crates/tt/" }

@@ -5,12 +5,13 @@
 //! is used to provide basic infrastructure for communication between two
 //! processes: Client (RA itself), Server (the external program)
 
-mod derives;
 pub mod legacy_protocol {
     pub mod json;
     pub mod msg;
 }
-mod process;
+pub mod derives;
+pub mod msg_json;
+pub mod process;
 
 use paths::{AbsPath, AbsPathBuf};
 use serde::{Deserialize, Serialize};
@@ -57,7 +58,7 @@ pub struct ProcMacroClient {
 /// DONE
 /// Represents a dynamically loaded library containing procedural macros.
 pub struct MacroDylib {
-    path: AbsPathBuf,
+    pub path: AbsPathBuf,
 }
 
 /// DONE
@@ -170,14 +171,14 @@ impl ProcMacro {
     /// DONE
     /// Returns the name of the procedural macro.
     pub fn name(&self) -> &str {
-        eprintln!("=======NAME=====");
+        // eprintln!("=======NAME=====");
         &self.name
     }
 
     /// DONE
     /// Returns the type of procedural macro.
     pub fn kind(&self) -> ProcMacroKind {
-        eprintln!("======kind======");
+        // eprintln!("======kind======");
         self.kind
     }
 
@@ -193,13 +194,13 @@ impl ProcMacro {
         mixed_site: Span,
         current_dir: Option<String>,
     ) -> Result<Result<tt::TopSubtree<Span>, PanicMessage>, ServerError> {
-        eprintln!("==== EXPAND ====");
-        eprintln!("\nsubtree=\n{subtree:?}");
-        eprintln!("\nattr=\n{attr:?}");
-        eprintln!("\ndef_site=\n{def_site:?}");
-        eprintln!("\ncall_site=\n{call_site:?}");
-        eprintln!("\nmixed_site=\n{mixed_site:?}");
-        eprintln!("\ncurrent_dir={current_dir:?}");
+        // eprintln!("==== EXPAND ====");
+        // eprintln!("\nsubtree=\n{subtree:?}");
+        // eprintln!("\nattr=\n{attr:?}");
+        // eprintln!("\ndef_site=\n{def_site:?}");
+        // eprintln!("\ncall_site=\n{call_site:?}");
+        // eprintln!("\nmixed_site=\n{mixed_site:?}");
+        // eprintln!("\ncurrent_dir={current_dir:?}");
 
         let version = self.process.version();
 

@@ -94,7 +94,7 @@ impl ProcMacroServerProcess {
     }
 
     /// Retrieves the API version of the proc-macro server.
-    pub(crate) fn version(&self) -> u32 {
+    pub fn version(&self) -> u32 {
         self.version
     }
 
@@ -149,7 +149,7 @@ impl ProcMacroServerProcess {
     }
 
     /// Sends a request to the proc-macro server and waits for a response.
-    pub(crate) fn send_task(&self, req: Request) -> Result<Response, ServerError> {
+    pub fn send_task(&self, req: Request) -> Result<Response, ServerError> {
         if let Some(server_error) = self.exited.get() {
             return Err(server_error.0.clone());
         }

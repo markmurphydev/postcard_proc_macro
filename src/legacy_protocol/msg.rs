@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn test_proc_macro_rpc_works() {
         let tt = fixture_token_tree();
-        eprintln!("{tt:?}");
+        // eprintln!("{tt:?}");
         for v in RUST_ANALYZER_SPAN_SUPPORT..=CURRENT_API_VERSION {
             let mut span_data_table = Default::default();
             let task = ExpandMacro {
@@ -329,7 +329,7 @@ mod tests {
             };
 
             let json = serde_json::to_string(&task).unwrap();
-            println!("{}", json);
+            // println!("{}", json);
             let back: ExpandMacro = serde_json::from_str(&json).unwrap();
 
             assert!(
