@@ -1,23 +1,23 @@
-use std::{collections::HashMap, env, error::Error, path::Path};
+use std::{collections::HashMap, env};
 
 use intern::{Symbol, sym};
 use paths::{AbsPath, AbsPathBuf, Utf8Path, Utf8PathBuf};
 use postcard_proc_macro::{
-    MacroDylib, ProcMacro, ProcMacroClient,
-    derives::TopSubtreeSerdeHelper,
+    MacroDylib, ProcMacroClient,
     legacy_protocol::msg::{
         ExpandMacro, ExpandMacroData, ExpnGlobals, FlatTree, HAS_GLOBAL_SPANS,
         RUST_ANALYZER_SPAN_SUPPORT, Request, SpanDataIndexMap, serialize_span_data_index_map,
     },
     process::ProcMacroServerProcess,
+    serde_derives::TopSubtreeSerdeHelper,
 };
 use span::{
     Edition, EditionedFileId, ErasedFileAstId, FileId, ROOT_ERASED_FILE_AST_ID, Span, SpanAnchor,
     SpanData, SyntaxContextId,
 };
 use tt::{
-    Delimiter, DelimiterKind, Ident, Leaf, Literal, Punct, Spacing, SubtreeView, TextRange,
-    TextSize, TopSubtree, TopSubtreeBuilder,
+    Delimiter, DelimiterKind, Ident, Leaf, Literal, Punct, Spacing, TextRange, TextSize,
+    TopSubtree, TopSubtreeBuilder,
 };
 
 fn fixture_token_tree() -> TopSubtree<Span> {
@@ -172,14 +172,17 @@ fn main() -> Result<(), anyhow::Error> {
         .expect("EXPAND");
     // println!("res={res:?}");
 
-    let top_subtree_helper = TopSubtreeSerdeHelper::new(top_subtree);
+    let top_subtree_helper: TopSubtreeSerdeHelper = top_subtree.clone().into();
     let json = serde_json::to_string(&top_subtree_helper)?;
     println!(
         "JSON\n\n{}",
         serde_json::to_string_pretty(&top_subtree_helper)?
     );
 
-    let un_json = serde_json::from_str::<TopSubtreeSerdeHelper<_>>(&json)?;
+    let un_json = serde_json::from_str::<TopSubtreeSerdeHelper>(&json)?;
+    let un_json: TopSubtree<Span> = un_json.into();
+
+    assert_eq!(top_subtree, un_json);
 
     Ok(())
 }

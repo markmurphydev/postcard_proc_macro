@@ -1,7 +1,5 @@
 //! Serde trait derives for types in `rust-analyzer/crates/tt`
 
-use std::num::NonZeroU32;
-
 use intern::Symbol;
 use salsa::{Id, plumbing::FromId};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
@@ -11,30 +9,14 @@ use tt::{
     SubtreeView, TextRange, TextSize, TokenTree, TopSubtree,
 };
 
-// Serde will infer the Serialize and Deserialize trait bounds for `S` if it's referenced directly (like in [DelimiterDef]),
-//  but does _not_ infer the bounds for `S` otherwise when chaining remote definitions.
-//  We add the bounds manually. See: https://serde.rs/attr-bound.html
-// `'de` appears to be in-scope in the macro expansion, so it can be referred to in the `Deserialize` bound.
-// TODO -- When Serde automatically inputs the bounds, it uses `_serde::Deserialize<'de>`.
-//      Am I meant to use that one?
-
 #[derive(Serialize, Deserialize)]
-#[serde(bound(serialize = "S: Serialize", deserialize = "S: Deserialize<'de>"))]
-pub struct TopSubtreeSerdeHelper<S>(#[serde(with = "TopSubtreeDef")] pub TopSubtree<S>);
+pub struct TopSubtreeSerdeHelper(
+    #[serde(with = "TopSubtreeDef")] pub TopSubtree<SpanDataDef<SyntaxContextDef>>,
+);
 
-impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
-    pub fn new(top_subtree: TopSubtree<Span>) -> Self {
-        let mapped = top_subtree
-            .0
-            .into_iter()
-            .map(Self::funcmap_wrap_span)
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        Self(TopSubtree(mapped))
-    }
-
-    /// Map over `token_tree`, wrapping each instance of `Span` in its ser/de wrapper
-    fn funcmap_wrap_span(token_tree: TokenTree<Span>) -> TokenTree<SpanDataDef<SyntaxContextDef>> {
+impl TopSubtreeSerdeHelper {
+    /// Map over the structure of `token_tree`, applying `f` to each generic member
+    fn funcmap<A, B>(token_tree: TokenTree<A>, f: fn(A) -> B) -> TokenTree<B> {
         match token_tree {
             TokenTree::Leaf(leaf) => TokenTree::Leaf(match leaf {
                 Leaf::Literal(Literal {
@@ -44,7 +26,7 @@ impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
                     suffix,
                 }) => Leaf::Literal(Literal {
                     symbol,
-                    span: Self::wrap_span(span),
+                    span: f(span),
                     kind,
                     suffix,
                 }),
@@ -55,11 +37,11 @@ impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
                 }) => Leaf::Punct(Punct {
                     char,
                     spacing,
-                    span: Self::wrap_span(span),
+                    span: f(span),
                 }),
                 Leaf::Ident(Ident { sym, span, is_raw }) => Leaf::Ident(Ident {
                     sym,
-                    span: Self::wrap_span(span),
+                    span: f(span),
                     is_raw,
                 }),
             }),
@@ -68,8 +50,8 @@ impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
                 len,
             }) => TokenTree::Subtree(Subtree {
                 delimiter: Delimiter {
-                    open: Self::wrap_span(open),
-                    close: Self::wrap_span(close),
+                    open: f(open),
+                    close: f(close),
                     kind: kind,
                 },
                 len: len,
@@ -78,7 +60,7 @@ impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
     }
 
     /// Wrap the given `Span` in its ser/de wrapper
-    fn wrap_span(Span { range, anchor, ctx }: Span) -> SpanDataDef<SyntaxContextDef> {
+    fn span_to_def(Span { range, anchor, ctx }: Span) -> SpanDataDef<SyntaxContextDef> {
         let ctx_def = SyntaxContextDef(
             salsa::Id::from_u32(ctx.into_u32()),
             std::marker::PhantomData,
@@ -89,19 +71,51 @@ impl TopSubtreeSerdeHelper<SpanDataDef<SyntaxContextDef>> {
             ctx: ctx_def,
         }
     }
+
+    /// Unwrap the given `Span` out of its ser/de wrapper
+    fn def_to_span(SpanDataDef { range, anchor, ctx }: SpanDataDef<SyntaxContextDef>) -> Span {
+        let ctx = SyntaxContext::from_u32(ctx.0.as_u32());
+        SpanData { range, anchor, ctx }
+    }
 }
 
-// TODO -- make a helper for `Span`.
-// REEEEEE IDK
+impl From<TopSubtree<Span>> for TopSubtreeSerdeHelper {
+    fn from(value: TopSubtree<Span>) -> Self {
+        let mapped = value
+            .0
+            .into_iter()
+            .map(|tt| Self::funcmap(tt, Self::span_to_def))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        Self(TopSubtree(mapped))
+    }
+}
+
+impl From<TopSubtreeSerdeHelper> for TopSubtree<Span> {
+    fn from(TopSubtreeSerdeHelper(top_subtree): TopSubtreeSerdeHelper) -> Self {
+        let mapped = top_subtree
+            .0
+            .into_iter()
+            .map(|tt| TopSubtreeSerdeHelper::funcmap(tt, TopSubtreeSerdeHelper::def_to_span))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        TopSubtree(mapped)
+    }
+}
+
+// Serde will infer the Serialize and Deserialize trait bounds for `S` if it's referenced directly (like in [DelimiterDef]),
+//  but does _not_ infer the bounds for `S` otherwise when chaining remote definitions.
+//  We add the bounds manually. See: https://serde.rs/attr-bound.html
+// `'de` appears to be in-scope in the macro expansion, so it can be referred to in the `Deserialize` bound.
+// TODO -- When Serde automatically inputs the bounds, it uses `_serde::Deserialize<'de>`.
+//      Am I meant to use that one?
 
 #[derive(Serialize, Deserialize)]
 #[serde(
     remote = "TopSubtree",
     bound(serialize = "S: Serialize", deserialize = "S: Deserialize<'de>")
 )]
-pub struct TopSubtreeDef<S>(
-    #[serde(with = "serialize_box_slice_token_tree")] pub Box<[TokenTree<S>]>,
-);
+struct TopSubtreeDef<S>(#[serde(with = "serialize_box_slice_token_tree")] pub Box<[TokenTree<S>]>);
 
 mod serialize_box_slice_token_tree {
     use super::TokenTreeDef;
@@ -142,7 +156,7 @@ mod serialize_box_slice_token_tree {
 
 #[derive(Serialize)]
 #[serde(remote = "SubtreeView", bound(serialize = "S: Serialize"))]
-pub struct SubtreeViewDef<'a, S: Copy>(
+struct SubtreeViewDef<'a, S: Copy>(
     #[serde(
         getter = "subtree_view_get_inner",
         serialize_with = "serialize_slice_token_tree"
@@ -200,7 +214,7 @@ pub enum LeafDef<S> {
     remote = "Subtree",
     bound(serialize = "S: Serialize", deserialize = "S: Deserialize<'de>")
 )]
-pub struct SubtreeDef<S> {
+struct SubtreeDef<S> {
     #[serde(with = "DelimiterDef")]
     pub delimiter: Delimiter<S>,
     /// Number of following token trees that belong to this subtree, excluding this subtree.
@@ -209,7 +223,7 @@ pub struct SubtreeDef<S> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Literal")]
-pub struct LiteralDef<S> {
+struct LiteralDef<S> {
     #[serde(with = "symbol_def")]
     pub symbol: Symbol,
     pub span: S,
@@ -221,7 +235,7 @@ pub struct LiteralDef<S> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Punct")]
-pub struct PunctDef<S> {
+struct PunctDef<S> {
     pub char: char,
     #[serde(with = "SpacingDef")]
     pub spacing: Spacing,
@@ -230,7 +244,7 @@ pub struct PunctDef<S> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Ident")]
-pub struct IdentDef<S> {
+struct IdentDef<S> {
     #[serde(with = "symbol_def")]
     pub sym: Symbol,
     pub span: S,
@@ -240,7 +254,7 @@ pub struct IdentDef<S> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Delimiter")]
-pub struct DelimiterDef<S> {
+struct DelimiterDef<S> {
     pub open: S,
     pub close: S,
     #[serde(with = "DelimiterKindDef")]
@@ -328,7 +342,7 @@ pub enum DelimiterKindDef {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct SpanDataDef<Ctx> {
+struct SpanDataDef<Ctx> {
     #[serde(with = "TextRangeDef")]
     pub range: TextRange,
     #[serde(with = "SpanAnchorDef")]
@@ -338,7 +352,7 @@ pub struct SpanDataDef<Ctx> {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "TextRange")]
-pub struct TextRangeDef {
+struct TextRangeDef {
     // Invariant: start <= end
     #[serde(getter = "text_range_get_start", with = "TextSizeDef")]
     start: TextSize,
@@ -362,7 +376,7 @@ impl From<TextRangeDef> for TextRange {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "SpanAnchor")]
-pub struct SpanAnchorDef {
+struct SpanAnchorDef {
     #[serde(with = "EditionedFileIdDef")]
     pub file_id: EditionedFileId,
     #[serde(with = "ErasedFileAstIdDef")]
@@ -371,7 +385,7 @@ pub struct SpanAnchorDef {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "TextSize")]
-pub struct TextSizeDef {
+struct TextSizeDef {
     #[serde(getter = "text_size_get_raw")]
     raw: u32,
 }
@@ -388,7 +402,7 @@ impl From<TextSizeDef> for TextSize {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "EditionedFileId")]
-pub struct EditionedFileIdDef(#[serde(getter = "editioned_file_id_get_inner")] u32);
+struct EditionedFileIdDef(#[serde(getter = "editioned_file_id_get_inner")] u32);
 
 fn editioned_file_id_get_inner(value: &EditionedFileId) -> u32 {
     value.as_u32()
@@ -402,7 +416,7 @@ impl From<EditionedFileIdDef> for EditionedFileId {
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "ErasedFileAstId")]
-pub struct ErasedFileAstIdDef(#[serde(getter = "erased_file_ast_id_get_inner")] u32);
+struct ErasedFileAstIdDef(#[serde(getter = "erased_file_ast_id_get_inner")] u32);
 
 fn erased_file_ast_id_get_inner(value: &ErasedFileAstId) -> u32 {
     value.into_raw()
@@ -415,7 +429,7 @@ impl From<ErasedFileAstIdDef> for ErasedFileAstId {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct SyntaxContextDef(
+struct SyntaxContextDef(
     #[serde(with = "salsa_id_def")] salsa::Id,
     #[serde(skip)]
     std::marker::PhantomData<&'static salsa::plumbing::interned::Value<SyntaxContext>>,

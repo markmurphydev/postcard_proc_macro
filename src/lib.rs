@@ -9,9 +9,9 @@ pub mod legacy_protocol {
     pub mod json;
     pub mod msg;
 }
-pub mod derives;
 pub mod msg_json;
 pub mod process;
+pub mod serde_derives;
 
 use paths::{AbsPath, AbsPathBuf};
 use serde::{Deserialize, Serialize};
